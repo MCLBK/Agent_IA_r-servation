@@ -218,6 +218,20 @@ class TravelAgent:
         elif "option 3" in msg or "option c" in msg or "la troisième" in msg:
             extracted["user_choice"] = 3
 
+        airlines = self.db.query(Flight.airline).filter(
+            Flight.agency_id == self.agency.id
+        ).distinct().all()
+        for (airline,) in airlines:
+            if airline.lower() in msg:
+                extracted["selected_airline"] = airline
+
+        hotel_names = self.db.query(Hotel.name).filter(
+            Hotel.agency_id == self.agency.id
+        ).all()
+        for (hname,) in hotel_names:
+            if hname.lower() in msg or any(part.lower() in msg for part in hname.split() if len(part) > 3):
+                extracted["selected_hotel_name"] = hname
+
         return extracted
 
     def _merge_project(self, project: dict, extracted: dict) -> dict:
@@ -556,10 +570,19 @@ class TravelAgent:
 
         user_choice = extracted.get("user_choice")
 
-        if intent == "search_hotels" or (conversation.current_step == "compare_flights" and user_choice):
-            if user_choice and conversation.current_step == "compare_flights":
+        selected_airline = extracted.get("selected_airline")
+        selected_hotel_name = extracted.get("selected_hotel_name")
+
+        flight_selected = user_choice or selected_airline
+        if intent == "search_hotels" or (conversation.current_step == "compare_flights" and flight_selected):
+            if conversation.current_step == "compare_flights":
                 flights = search_flights(self.db, self.agency.id, destination_id=dest_id)
-                if user_choice <= len(flights):
+                if selected_airline:
+                    for f in flights:
+                        if f.airline.lower() == selected_airline.lower():
+                            project["selected_flight_id"] = f.id
+                            break
+                elif user_choice and user_choice <= len(flights):
                     project["selected_flight_id"] = flights[user_choice - 1].id
 
             hotels = search_hotels(self.db, self.agency.id, destination_id=dest_id)
@@ -572,9 +595,15 @@ class TravelAgent:
                 "collect_criteria", None, None,
             )
 
-        if conversation.current_step == "compare_hotels" and user_choice:
+        hotel_selected = user_choice or selected_hotel_name
+        if conversation.current_step == "compare_hotels" and hotel_selected:
             hotels = search_hotels(self.db, self.agency.id, destination_id=dest_id)
-            if user_choice <= len(hotels):
+            if selected_hotel_name:
+                for h in hotels:
+                    if h.name.lower() == selected_hotel_name.lower() or selected_hotel_name.lower() in h.name.lower():
+                        project["selected_hotel_id"] = h.id
+                        break
+            elif user_choice and user_choice <= len(hotels):
                 project["selected_hotel_id"] = hotels[user_choice - 1].id
             conversation.travel_project = project
 
