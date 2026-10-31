@@ -1,8 +1,10 @@
+import copy
 import json
 import re
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from app.models import Agency, Conversation, Message, Destination, Flight, Hotel, Package
 from app.ai.providers import get_provider, DemoProvider
 from app.ai.prompts import SYSTEM_PROMPT, EXTRACTION_PROMPT
@@ -67,10 +69,11 @@ class TravelAgent:
         )
         self.db.add(msg)
 
-        project = conversation.travel_project or {}
+        project = copy.deepcopy(conversation.travel_project or {})
         extracted = await self._extract_info(user_message, project)
         project = self._merge_project(project, extracted)
         conversation.travel_project = project
+        flag_modified(conversation, "travel_project")
 
         step = conversation.current_step
         intent = extracted.get("intent", "")
@@ -102,6 +105,7 @@ class TravelAgent:
         )
         self.db.add(assistant_msg)
         conversation.travel_project = project
+        flag_modified(conversation, "travel_project")
         conversation.last_message_at = datetime.now(timezone.utc)
         self.db.commit()
 
