@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -24,7 +24,7 @@ function formatDate(d: string | null) {
   return d;
 }
 
-export default function TrackingPage() {
+function TrackingContent() {
   const searchParams = useSearchParams();
   const [reference, setReference] = useState("");
   const [email, setEmail] = useState("");
@@ -251,5 +251,13 @@ export default function TrackingPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function TrackingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400">Chargement...</div>}>
+      <TrackingContent />
+    </Suspense>
   );
 }
