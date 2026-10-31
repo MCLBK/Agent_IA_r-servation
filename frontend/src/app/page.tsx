@@ -256,12 +256,7 @@ export default function ChatPage() {
               <p className="text-xs text-gray-400">Assistant Voyage</p>
             </div>
           </div>
-          <a
-            href="/login"
-            className="text-xs text-gray-400 hover:text-navy-900 transition-colors"
-          >
-            Espace agence
-          </a>
+          <div className="w-8" />
         </div>
       </header>
 
