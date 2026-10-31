@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/growup.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-with-a-real-secret-key}
+      - AI_PROVIDER=demo
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - backend-data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:
