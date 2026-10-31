@@ -9,10 +9,16 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _get_frontend_url():
+    settings = get_settings()
+    return getattr(settings, "FRONTEND_URL", "https://agent-ia-r-servation.vercel.app")
+
+
 def _build_booking_html(booking, flight, hotel, agency) -> str:
     dep_date = booking.departure_date.strftime("%d/%m/%Y") if booking.departure_date else "-"
     ret_date = booking.return_date.strftime("%d/%m/%Y") if booking.return_date else "-"
     created = booking.created_at.strftime("%d/%m/%Y a %Hh%M") if booking.created_at else "-"
+    tracking_url = f"{_get_frontend_url()}/tracking?ref={booking.reference}"
 
     flight_html = ""
     if flight:
@@ -151,10 +157,18 @@ def _build_booking_html(booking, flight, hotel, agency) -> str:
 
             <!-- Tracking -->
             <tr>
-                <td style="padding:12px 24px 24px;text-align:center;">
-                    <p style="color:#64748b;font-size:13px;">
-                        Suivez votre reservation en ligne avec la reference
-                        <strong>{booking.reference}</strong>
+                <td style="padding:16px 24px 8px;text-align:center;">
+                    <a href="{tracking_url}"
+                       style="display:inline-block;background:#1B3A5C;color:#ffffff;font-weight:600;
+                              text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;">
+                        Suivre ma reservation
+                    </a>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding:8px 24px 24px;text-align:center;">
+                    <p style="color:#64748b;font-size:12px;">
+                        Ou utilisez la reference <strong>{booking.reference}</strong> sur notre page de suivi.
                     </p>
                 </td>
             </tr>
@@ -209,11 +223,13 @@ def _build_booking_text(booking, flight, hotel, agency) -> str:
             f"",
         ]
 
+    tracking_url = f"{_get_frontend_url()}/tracking?ref={booking.reference}"
     lines += [
         f"--- Total ---",
         f"{booking.total_price:.2f} {booking.currency}",
         f"",
-        f"Suivez votre reservation avec la reference {booking.reference}.",
+        f"Suivez votre reservation : {tracking_url}",
+        f"Reference : {booking.reference}",
         f"",
         f"Reservation de demonstration.",
     ]

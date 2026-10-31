@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
@@ -24,11 +25,26 @@ function formatDate(d: string | null) {
 }
 
 export default function TrackingPage() {
+  const searchParams = useSearchParams();
   const [reference, setReference] = useState("");
   const [email, setEmail] = useState("");
   const [booking, setBooking] = useState<any>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [autoSearched, setAutoSearched] = useState(false);
+
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref && !autoSearched) {
+      setReference(ref.toUpperCase());
+      setAutoSearched(true);
+      setLoading(true);
+      api.trackBooking(ref.trim(), undefined)
+        .then(setBooking)
+        .catch((err: any) => setError(err.message || "Reservation introuvable"))
+        .finally(() => setLoading(false));
+    }
+  }, [searchParams, autoSearched]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();

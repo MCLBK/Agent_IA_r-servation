@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = ""
     SMTP_FROM_EMAIL: str = ""
 
+    FRONTEND_URL: str = "https://agent-ia-r-servation.vercel.app"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -609,14 +609,21 @@ class TravelAgent:
         flight_selected = user_choice or selected_airline
         if intent == "search_hotels" or (conversation.current_step == "compare_flights" and flight_selected):
             if conversation.current_step == "compare_flights":
-                flights = search_flights(self.db, self.agency.id, destination_id=dest_id, departure_city=dep_city)
-                if selected_airline:
-                    for f in flights:
-                        if f.airline.lower() == selected_airline.lower():
-                            project["selected_flight_id"] = f.id
-                            break
-                elif user_choice and user_choice <= len(flights):
-                    project["selected_flight_id"] = flights[user_choice - 1].id
+                conn_opts = project.get("connection_options")
+                if conn_opts and user_choice and user_choice <= len(conn_opts):
+                    chosen = conn_opts[user_choice - 1]
+                    project["selected_flight_id"] = chosen["leg2_id"]
+                    project["selected_connection"] = chosen
+                    project.pop("connection_options", None)
+                else:
+                    flights = search_flights(self.db, self.agency.id, destination_id=dest_id, departure_city=dep_city)
+                    if selected_airline:
+                        for f in flights:
+                            if f.airline.lower() == selected_airline.lower():
+                                project["selected_flight_id"] = f.id
+                                break
+                    elif user_choice and flights and user_choice <= len(flights):
+                        project["selected_flight_id"] = flights[user_choice - 1].id
 
             hotels = search_hotels(self.db, self.agency.id, destination_id=dest_id)
             if hotels:
@@ -670,6 +677,13 @@ class TravelAgent:
             return text, "compare_flights", offers, None
 
         if dep_city:
+            connections = self._find_connections(dest_id, dep_city, project)
+            if connections:
+                offers = connections["offers"]
+                text = connections["text"]
+                project["connection_options"] = connections["options"]
+                return text, "compare_flights", offers, None
+
             flights_any = search_flights(self.db, self.agency.id, destination_id=dest_id)
             if flights_any:
                 dep_cities = list({f.departure_city for f in flights_any})
@@ -684,6 +698,96 @@ class TravelAgent:
             "Aucun vol disponible pour cette destination. Souhaitez-vous essayer une autre destination ?",
             "collect_criteria", None, None,
         )
+
+    def _find_connections(self, dest_id, dep_city, project):
+        flights_to_dest = search_flights(self.db, self.agency.id, destination_id=dest_id, limit=20)
+        if not flights_to_dest:
+            return None
+
+        hub_cities = {f.departure_city for f in flights_to_dest}
+
+        all_from_dep = self.db.query(Flight).filter(
+            Flight.agency_id == self.agency.id,
+            Flight.is_available == True,
+            Flight.departure_city.ilike(f"%{dep_city}%"),
+        ).all()
+
+        connections = []
+        for leg1 in all_from_dep:
+            leg1_arrival = leg1.arrival_city
+            matching_leg2 = [f for f in flights_to_dest if f.departure_city.lower() == leg1_arrival.lower()]
+            for leg2 in matching_leg2:
+                total_duration = leg1.duration_minutes + leg2.duration_minutes + 120
+                num_adults = project.get("num_adults", 1)
+                num_children = project.get("num_children", 0)
+                total_price = (
+                    (leg1.price_per_adult + leg2.price_per_adult) * num_adults
+                    + (leg1.price_per_child + leg2.price_per_child) * num_children
+                )
+                connections.append({
+                    "leg1": leg1,
+                    "leg2": leg2,
+                    "hub": leg1_arrival,
+                    "total_duration": total_duration,
+                    "total_price": total_price,
+                })
+
+        if not connections:
+            return None
+
+        connections.sort(key=lambda c: c["total_price"])
+        connections = connections[:3]
+
+        num_adults = project.get("num_adults", 1)
+        num_children = project.get("num_children", 0)
+        dest_name = project.get("destination", "votre destination")
+
+        text = (
+            f"Pas de vol direct depuis {dep_city} vers {dest_name}. "
+            f"Voici des itineraires avec correspondance :\n\n"
+        )
+
+        offers = []
+        options = []
+        for i, conn in enumerate(connections, 1):
+            leg1 = conn["leg1"]
+            leg2 = conn["leg2"]
+            dur_h = conn["total_duration"] // 60
+            dur_m = conn["total_duration"] % 60
+            text += (
+                f"**Option {i} : via {conn['hub']}**\n"
+                f"  Vol 1 : {leg1.airline} {leg1.flight_number} — "
+                f"{leg1.departure_city} ({leg1.departure_time}) → {leg1.arrival_city} ({leg1.arrival_time})\n"
+                f"  Vol 2 : {leg2.airline} {leg2.flight_number} — "
+                f"{leg2.departure_city} ({leg2.departure_time}) → {leg2.arrival_city} ({leg2.arrival_time})\n"
+                f"  Duree totale estimee : {dur_h}h{dur_m:02d} (avec correspondance)\n"
+                f"  **Prix total : {conn['total_price']:.2f} EUR** "
+                f"({num_adults} adulte(s){f', {num_children} enfant(s)' if num_children else ''})\n\n"
+            )
+            offers.append({
+                "type": "flight",
+                "id": f"conn_{leg1.id}_{leg2.id}",
+                "airline": f"{leg1.airline} + {leg2.airline}",
+                "flight_number": f"{leg1.flight_number} / {leg2.flight_number}",
+                "departure": f"{leg1.departure_city} ({leg1.departure_airport})",
+                "arrival": f"{leg2.arrival_city} ({leg2.arrival_airport})",
+                "departure_time": leg1.departure_time,
+                "arrival_time": leg2.arrival_time,
+                "duration_minutes": conn["total_duration"],
+                "stops": 1,
+                "baggage": leg1.baggage_included,
+                "price_per_adult": leg1.price_per_adult + leg2.price_per_adult,
+                "total_price": conn["total_price"],
+                "currency": leg1.currency,
+                "cancellation": "Selon conditions de chaque vol",
+                "modification": "",
+                "seats": min(leg1.available_seats, leg2.available_seats),
+                "connection_via": conn["hub"],
+            })
+            options.append({"leg1_id": leg1.id, "leg2_id": leg2.id, "hub": conn["hub"]})
+
+        text += "Quel itineraire vous convient ? Ensuite je vous montrerai les hotels."
+        return {"text": text, "offers": offers, "options": options}
 
     async def _llm_flow(self, conversation, project, message):
         system = SYSTEM_PROMPT.format(
@@ -910,7 +1014,23 @@ class TravelAgent:
                 text += f" au {project['return_date']}"
             text += "\n"
 
-        if flight:
+        conn = project.get("selected_connection")
+        if conn:
+            leg1 = self.db.query(Flight).filter(Flight.id == conn["leg1_id"]).first()
+            if leg1 and flight:
+                leg1_total = leg1.price_per_adult * num_adults + leg1.price_per_child * num_children
+                leg2_total = flight.price_per_adult * num_adults + flight.price_per_child * num_children
+                flight_total = leg1_total + leg2_total
+                total += flight_total
+                text += (
+                    f"\n**Vols (correspondance via {conn['hub']})** :\n"
+                    f"  Vol 1 : {leg1.airline} {leg1.flight_number} — "
+                    f"{leg1.departure_city} ({leg1.departure_time}) → {leg1.arrival_city} ({leg1.arrival_time})\n"
+                    f"  Vol 2 : {flight.airline} {flight.flight_number} — "
+                    f"{flight.departure_city} ({flight.departure_time}) → {flight.arrival_city} ({flight.arrival_time})\n"
+                    f"  Prix vols : {flight_total:.2f} EUR\n"
+                )
+        elif flight:
             flight_total = flight.price_per_adult * num_adults + flight.price_per_child * num_children
             total += flight_total
             text += (
@@ -956,6 +1076,11 @@ class TravelAgent:
                 flight = self.db.query(Flight).filter(Flight.id == project["selected_flight_id"]).first()
             if project.get("selected_hotel_id"):
                 hotel = self.db.query(Hotel).filter(Hotel.id == project["selected_hotel_id"]).first()
+            conn = project.get("selected_connection")
+            if conn:
+                leg1 = self.db.query(Flight).filter(Flight.id == conn["leg1_id"]).first()
+                if leg1:
+                    total += leg1.price_per_adult * num_adults + leg1.price_per_child * num_children
             if flight:
                 total += flight.price_per_adult * num_adults + flight.price_per_child * num_children
             if hotel:

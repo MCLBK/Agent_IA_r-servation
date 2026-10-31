@@ -194,12 +194,38 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem("chat_session");
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.messages?.length) setMessages(data.messages);
+        if (data.sessionId) setSessionId(data.sessionId);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (messages.length > 0 || sessionId) {
+      try {
+        localStorage.setItem("chat_session", JSON.stringify({ messages, sessionId }));
+      } catch {}
+    }
+  }, [messages, sessionId]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setSessionId(undefined);
+    setInput("");
+    try { localStorage.removeItem("chat_session"); } catch {}
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
@@ -256,12 +282,22 @@ export default function ChatPage() {
               <p className="text-xs text-gray-400">Assistant Voyage</p>
             </div>
           </div>
-          <a
-            href="/tracking"
-            className="text-xs text-navy-600 hover:text-navy-800 font-medium transition-colors whitespace-nowrap"
-          >
-            Suivre ma reservation
-          </a>
+          <div className="flex items-center gap-3">
+            {messages.length > 0 && (
+              <button
+                onClick={handleNewChat}
+                className="text-xs text-gray-500 hover:text-navy-800 font-medium transition-colors whitespace-nowrap"
+              >
+                Nouvelle conversation
+              </button>
+            )}
+            <a
+              href="/tracking"
+              className="text-xs text-navy-600 hover:text-navy-800 font-medium transition-colors whitespace-nowrap"
+            >
+              Suivre ma reservation
+            </a>
+          </div>
         </div>
       </header>
 
