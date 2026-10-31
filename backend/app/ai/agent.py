@@ -175,13 +175,27 @@ class TravelAgent:
             if kw in msg:
                 extracted.setdefault("preferences", []).append(dtype)
 
-        cities = ["paris", "lyon", "marseille", "toulouse", "nice", "bordeaux", "nantes", "lille"]
-        for city in cities:
-            if city in msg and "départ" in msg or "partir de" in msg:
-                extracted["departure_city"] = city.capitalize()
-
-        if not project.get("departure_city") and "departure_city" not in extracted:
-            extracted.setdefault("departure_city", "Paris")
+        departure_cities = {
+            "paris": "Paris", "lyon": "Lyon", "marseille": "Marseille",
+            "toulouse": "Toulouse", "nice": "Nice", "bordeaux": "Bordeaux",
+            "nantes": "Nantes", "lille": "Lille", "bruxelles": "Bruxelles",
+            "cotonou": "Cotonou", "abidjan": "Abidjan", "dakar": "Dakar",
+            "casablanca": "Casablanca", "lome": "Lome", "douala": "Douala",
+            "nairobi": "Nairobi", "le caire": "Le Caire", "dubai": "Dubai",
+            "istanbul": "Istanbul", "londres": "Londres", "new york": "New York",
+            "accra": "Accra", "tunis": "Tunis", "addis abeba": "Addis Abeba",
+            "johannesburg": "Johannesburg", "lagos": "Lagos",
+            "libreville": "Libreville", "kinshasa": "Kinshasa",
+            "bamako": "Bamako", "ouagadougou": "Ouagadougou",
+            "niamey": "Niamey", "conakry": "Conakry",
+        }
+        dep_triggers = ["départ", "depart", "partir de", "depuis", "au départ", "au depart", "de retour"]
+        has_dep_trigger = any(t in msg for t in dep_triggers)
+        needs_dep_city = not project.get("departure_city") and project.get("destination")
+        for key, city_name in departure_cities.items():
+            if key in msg and (has_dep_trigger or needs_dep_city):
+                extracted["departure_city"] = city_name
+                break
 
         dest_names = [d.name.lower() for d in self.db.query(Destination).filter(
             Destination.agency_id == self.agency.id, Destination.is_active == True
@@ -379,6 +393,12 @@ class TravelAgent:
                 )
 
             if has_destination and has_dates and has_travelers:
+                if not project.get("departure_city"):
+                    return (
+                        "De quelle ville souhaitez-vous partir ? "
+                        "(Par exemple : Paris, Cotonou, Abidjan, Dakar, Casablanca, Dubai...)",
+                        "collect_criteria", None, None,
+                    )
                 return await self._demo_flow_search(conversation, project, extracted)
 
             if project.get("budget") or project.get("preferences"):
@@ -416,6 +436,12 @@ class TravelAgent:
                 if not project.get("num_adults"):
                     return (
                         "Combien de personnes voyageront ?",
+                        "collect_criteria", None, None,
+                    )
+                if not project.get("departure_city"):
+                    return (
+                        "De quelle ville souhaitez-vous partir ? "
+                        "(Par exemple : Paris, Cotonou, Abidjan, Dakar, Casablanca, Dubai...)",
                         "collect_criteria", None, None,
                     )
                 return await self._demo_flow_search(conversation, project, extracted)
@@ -517,6 +543,7 @@ class TravelAgent:
                         f"**Statut : En attente de confirmation**\n\n"
                         f"Un conseiller va verifier votre dossier et proceder a l'emission de vos documents de voyage. "
                         f"Vous recevrez une confirmation par e-mail.{payment_info}\n\n"
+                        f"Suivez votre reservation a tout moment sur notre page de suivi avec la reference **{booking_obj.reference}**.\n\n"
                         f"*Il s'agit d'une reservation de demonstration.*\n\n"
                         f"Puis-je vous aider pour autre chose ?",
                         "booking_complete", None, booking,
@@ -577,10 +604,12 @@ class TravelAgent:
         selected_airline = extracted.get("selected_airline")
         selected_hotel_name = extracted.get("selected_hotel_name")
 
+        dep_city = project.get("departure_city")
+
         flight_selected = user_choice or selected_airline
         if intent == "search_hotels" or (conversation.current_step == "compare_flights" and flight_selected):
             if conversation.current_step == "compare_flights":
-                flights = search_flights(self.db, self.agency.id, destination_id=dest_id)
+                flights = search_flights(self.db, self.agency.id, destination_id=dest_id, departure_city=dep_city)
                 if selected_airline:
                     for f in flights:
                         if f.airline.lower() == selected_airline.lower():
@@ -634,11 +663,22 @@ class TravelAgent:
                 )
             return summary, "show_summary", None, None
 
-        flights = search_flights(self.db, self.agency.id, destination_id=dest_id)
+        flights = search_flights(self.db, self.agency.id, destination_id=dest_id, departure_city=dep_city)
         if flights:
             offers = self._format_flights(flights, project)
             text = self._build_flight_comparison(flights, project)
             return text, "compare_flights", offers, None
+
+        if dep_city:
+            flights_any = search_flights(self.db, self.agency.id, destination_id=dest_id)
+            if flights_any:
+                dep_cities = list({f.departure_city for f in flights_any})
+                return (
+                    f"Aucun vol direct depuis {dep_city} pour cette destination. "
+                    f"Des vols sont disponibles au depart de : {', '.join(dep_cities)}. "
+                    f"Souhaitez-vous partir d'une de ces villes ?",
+                    "collect_criteria", None, None,
+                )
 
         return (
             "Aucun vol disponible pour cette destination. Souhaitez-vous essayer une autre destination ?",

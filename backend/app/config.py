@@ -20,6 +20,13 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = ""
+    SMTP_FROM_EMAIL: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

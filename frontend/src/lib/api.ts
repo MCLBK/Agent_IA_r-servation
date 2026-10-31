@@ -86,6 +86,20 @@ export const api = {
   cancelBooking: (id: number, reason = "") =>
     request<any>(`/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}`, { method: "POST" }),
 
+  // Booking tracking (public, no auth)
+  trackBooking: (reference: string, email?: string) => {
+    const params = new URLSearchParams({ reference });
+    if (email) params.set("email", email);
+    return fetch(`${API_BASE}/bookings/track/${encodeURIComponent(reference)}${email ? `?email=${encodeURIComponent(email)}` : ""}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.detail || `Erreur ${res.status}`);
+        }
+        return res.json();
+      });
+  },
+
   // Conversations
   getConversations: (status?: string, needsHuman?: boolean) => {
     const params = new URLSearchParams();

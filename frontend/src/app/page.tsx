@@ -11,10 +11,10 @@ interface Message {
 }
 
 const SUGGESTIONS = [
-  "Je cherche une destination pour deux personnes en decembre, budget 1000 euros",
-  "Quelles destinations proposez-vous pour un sejour plage ?",
-  "Je voudrais partir a Marrakech la semaine prochaine",
-  "Montrez-moi les vols pour Lisbonne",
+  "Je cherche un sejour plage pour 2 personnes, depart de Cotonou",
+  "Quelles destinations proposez-vous depuis Paris en decembre ?",
+  "Je voudrais partir du Benin pour les Maldives ou Zanzibar",
+  "Montrez-moi les vols Abidjan → Marrakech",
 ];
 
 function formatContent(text: string) {
@@ -256,7 +256,12 @@ export default function ChatPage() {
               <p className="text-xs text-gray-400">Assistant Voyage</p>
             </div>
           </div>
-          <div className="w-8" />
+          <a
+            href="/tracking"
+            className="text-xs text-navy-600 hover:text-navy-800 font-medium transition-colors whitespace-nowrap"
+          >
+            Suivre ma reservation
+          </a>
         </div>
       </header>
 

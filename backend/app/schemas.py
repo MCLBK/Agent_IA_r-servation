@@ -309,6 +309,30 @@ class BookingOut(BaseModel):
         from_attributes = True
 
 
+class BookingPublicOut(BaseModel):
+    reference: str
+    status: str
+    departure_date: Optional[date]
+    return_date: Optional[date]
+    check_in_date: Optional[date]
+    check_out_date: Optional[date]
+    num_adults: int
+    num_children: int
+    num_infants: int
+    total_price: float
+    currency: str
+    payment_status: str
+    created_at: datetime
+    confirmed_at: Optional[datetime]
+    destination_name: str = ""
+    destination_country: str = ""
+    flight_summary: str = ""
+    hotel_summary: str = ""
+
+    class Config:
+        from_attributes = True
+
+
 # ──────────────────────────────────────────────
 # CONVERSATION
 # ──────────────────────────────────────────────

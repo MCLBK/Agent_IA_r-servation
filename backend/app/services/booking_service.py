@@ -84,6 +84,16 @@ def create_booking(
             flight.available_seats -= booking.num_adults + booking.num_children
             db.commit()
 
+    try:
+        from app.services.email_service import send_booking_confirmation
+        from app.models import Agency
+        b_flight = db.query(Flight).filter(Flight.id == flight_id).first() if flight_id else None
+        b_hotel = db.query(Hotel).filter(Hotel.id == hotel_id).first() if hotel_id else None
+        agency = db.query(Agency).filter(Agency.id == agency_id).first()
+        send_booking_confirmation(booking, b_flight, b_hotel, agency)
+    except Exception:
+        pass
+
     return booking
 
 
